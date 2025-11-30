@@ -57,7 +57,7 @@ sudo python webcam.py --night -n 5 -b -10 -c 1.2
 ### Custom Output Directory
 
 ```bash
-sudo python webcam.py -n 10 -o /home/pv/cctv/frames_custom
+sudo python webcam.py -n 10 -o ./frames_custom
 ```
 
 ### Custom Camera Device & Resolution
@@ -72,7 +72,7 @@ sudo python webcam.py -d 1 --width 1920 --height 1080 -n 5
 -d, --device          Camera device index (default: 0) or URL
 --width               Frame width in pixels (default: 1280)
 --height              Frame height in pixels (default: 720)
--o, --output          Output directory (default: /home/pv/cctv/frames)
+-o, --output          Output directory (default: ./frames)
 -n, --num-frames      Number of frames to capture (default: 10)
 -b, --brightness      Brightness adjustment -50 to 50 (default: 0)
 -c, --contrast        Contrast adjustment 0.5 to 2.0 (default: 1.0)
@@ -89,7 +89,7 @@ sudo python webcam.py -n 20
 
 ### Capture 15 frames in night mode with reduced brightness
 ```bash
-sudo python webcam.py --night -n 15 -b -5
+sudo python webcam.py --night -n 15 -b -5 -o ./frames_night
 ```
 
 ### Capture from device 1 with high contrast

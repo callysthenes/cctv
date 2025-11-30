@@ -24,7 +24,7 @@ def main():
     )
     parser.add_argument(
         "-o", "--output",
-        default="/home/pv/cctv/frames",
+        default="./frames",
         help="Output directory for captured frames."
     )
     parser.add_argument(
