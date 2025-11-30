@@ -238,7 +238,6 @@
                     <select id="detection-model" style="padding: 8px; background: #1a1a1a; color: #fff; border: 1px solid #333; border-radius: 4px; cursor: pointer;">
                         <option value="none">None</option>
                         <option value="yolo" id="yolo-opt" disabled>YOLO (Loading...)</option>
-                        <option value="rfdetr" id="rfdetr-opt" disabled>RF-DETR (Loading...)</option>
                     </select>
                 </div>
                 
@@ -306,12 +305,8 @@
                     
                     // Enable/disable detection options
                     document.getElementById('yolo-opt').disabled = !data.yolo_available;
-                    document.getElementById('rfdetr-opt').disabled = !data.rfdetr_available;
                     if (data.yolo_available) {
                         document.getElementById('yolo-opt').textContent = 'YOLO';
-                    }
-                    if (data.rfdetr_available) {
-                        document.getElementById('rfdetr-opt').textContent = 'RF-DETR';
                     }
                 });
         }

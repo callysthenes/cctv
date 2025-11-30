@@ -50,7 +50,7 @@ rfdetr_processor = None
 
 def load_models():
     """Load detection models on startup"""
-    global yolo_model, rfdetr_model, rfdetr_processor
+    global yolo_model, rfdetr_model, rfdetr_processor, RFDETR_AVAILABLE
     
     if YOLO_AVAILABLE:
         print("Loading YOLO model...")
@@ -60,17 +60,8 @@ def load_models():
         except Exception as e:
             print(f"✗ Failed to load YOLO: {e}")
     
-    if RFDETR_AVAILABLE:
-        print("Loading RF-DETR model...")
-        try:
-            rfdetr_model = AutoModelForObjectDetection.from_pretrained("microsoft/conditional-detr-resnet50", num_labels=91)
-            rfdetr_processor = AutoImageProcessor.from_pretrained("microsoft/conditional-detr-resnet50")
-            rfdetr_model.eval()
-            if torch.cuda.is_available():
-                rfdetr_model = rfdetr_model.cuda()
-            print("✓ RF-DETR loaded")
-        except Exception as e:
-            print(f"✗ Failed to load RF-DETR: {e}")
+    # RF-DETR is optional - skip for now
+    RFDETR_AVAILABLE = False
 
 def capture_frames():
     """Background thread for camera capture"""
