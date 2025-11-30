@@ -231,6 +231,27 @@
                 
                 <button class="capture-btn" id="capture-btn">📸 Capture Frame</button>
                 
+                <hr style="border: none; border-top: 1px solid #333; margin: 15px 0;">
+                
+                <div class="control-group">
+                    <label class="control-label">🤖 Detection Model</label>
+                    <select id="detection-model" style="padding: 8px; background: #1a1a1a; color: #fff; border: 1px solid #333; border-radius: 4px; cursor: pointer;">
+                        <option value="none">None</option>
+                        <option value="yolo" id="yolo-opt" disabled>YOLO (Loading...)</option>
+                        <option value="rfdetr" id="rfdetr-opt" disabled>RF-DETR (Loading...)</option>
+                    </select>
+                </div>
+                
+                <div class="control-group">
+                    <label class="control-label">
+                        <span>Confidence</span>
+                        <span class="control-value" id="confidence-value">0.50</span>
+                    </label>
+                    <input type="range" id="detection-confidence" min="0" max="1" step="0.05" value="0.5">
+                </div>
+                
+                <div class="status" id="detections-status">No detections</div>
+                
                 <div class="status" id="status">Ready</div>
             </div>
         </div>
@@ -241,6 +262,8 @@
             brightness: 0,
             contrast: 1.0,
             night_mode: false,
+            detection_model: 'none',
+            detection_confidence: 0.5,
         };
         
         // Update state from server every 500ms
@@ -252,6 +275,8 @@
                     state.brightness = data.brightness;
                     state.contrast = data.contrast;
                     state.night_mode = data.night_mode;
+                    state.detection_model = data.detection_model;
+                    state.detection_confidence = data.detection_confidence;
                     
                     // Update UI
                     document.getElementById('brightness').value = state.brightness;
@@ -259,6 +284,16 @@
                     document.getElementById('contrast').value = state.contrast;
                     document.getElementById('contrast-value').textContent = state.contrast.toFixed(1);
                     document.getElementById('night-status').textContent = state.night_mode ? 'ON' : 'OFF';
+                    document.getElementById('detection-model').value = state.detection_model;
+                    document.getElementById('detection-confidence').value = state.detection_confidence;
+                    document.getElementById('confidence-value').textContent = state.detection_confidence.toFixed(2);
+                    document.getElementById('detection-status').textContent = state.detection_model.toUpperCase();
+                    
+                    if (data.detections_count > 0) {
+                        document.getElementById('detections-status').textContent = `🎯 ${data.detections_count} object(s)`;
+                    } else {
+                        document.getElementById('detections-status').textContent = 'No detections';
+                    }
                     
                     const btn = document.getElementById('night-mode-btn');
                     if (state.night_mode) {
@@ -267,6 +302,16 @@
                     } else {
                         btn.classList.remove('active');
                         btn.textContent = '🌙 Night Mode: OFF';
+                    }
+                    
+                    // Enable/disable detection options
+                    document.getElementById('yolo-opt').disabled = !data.yolo_available;
+                    document.getElementById('rfdetr-opt').disabled = !data.rfdetr_available;
+                    if (data.yolo_available) {
+                        document.getElementById('yolo-opt').textContent = 'YOLO';
+                    }
+                    if (data.rfdetr_available) {
+                        document.getElementById('rfdetr-opt').textContent = 'RF-DETR';
                     }
                 });
         }
@@ -320,6 +365,35 @@
                 } else {
                     document.getElementById('status').textContent = '❌ Capture failed';
                 }
+            });
+        });
+        
+        // Detection model selection
+        document.getElementById('detection-model').addEventListener('change', (e) => {
+            const model = e.target.value;
+            fetch('/api/detection_model', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({model})
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    document.getElementById('status').textContent = `Detection: ${model}`;
+                } else {
+                    document.getElementById('status').textContent = `Error: ${data.error}`;
+                    e.target.value = 'none';
+                }
+            });
+        });
+        
+        // Detection confidence slider
+        document.getElementById('detection-confidence').addEventListener('input', (e) => {
+            const confidence = e.target.value;
+            fetch('/api/detection_confidence', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({confidence})
             });
         });
         

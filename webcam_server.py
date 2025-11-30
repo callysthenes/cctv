@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Web-based camera streaming server with live controls.
+Web-based camera streaming server with live controls and object detection.
 Access at http://localhost:5000
 """
 import cv2
@@ -8,6 +8,23 @@ import threading
 import time
 from flask import Flask, render_template, jsonify, request
 from pathlib import Path
+import numpy as np
+
+# Import models
+try:
+    from ultralytics import YOLO
+    YOLO_AVAILABLE = True
+except ImportError:
+    YOLO_AVAILABLE = False
+    print("WARNING: ultralytics not installed. Install with: pip install ultralytics")
+
+try:
+    from transformers import AutoImageProcessor, AutoModelForObjectDetection
+    import torch
+    RFDETR_AVAILABLE = True
+except ImportError:
+    RFDETR_AVAILABLE = False
+    print("WARNING: transformers/torch not installed. Install with: pip install transformers torch")
 
 app = Flask(__name__)
 
@@ -21,7 +38,39 @@ camera_state = {
     'running': True,
     'fps': 0,
     'frame_count': 0,
+    'detection_model': 'none',  # 'none', 'yolo', 'rfdetr'
+    'detection_confidence': 0.5,
+    'detections': [],
 }
+
+# Load models
+yolo_model = None
+rfdetr_model = None
+rfdetr_processor = None
+
+def load_models():
+    """Load detection models on startup"""
+    global yolo_model, rfdetr_model, rfdetr_processor
+    
+    if YOLO_AVAILABLE:
+        print("Loading YOLO model...")
+        try:
+            yolo_model = YOLO('yolov8n.pt')  # nano model
+            print("✓ YOLO loaded")
+        except Exception as e:
+            print(f"✗ Failed to load YOLO: {e}")
+    
+    if RFDETR_AVAILABLE:
+        print("Loading RF-DETR model...")
+        try:
+            rfdetr_model = AutoModelForObjectDetection.from_pretrained("microsoft/conditional-detr-resnet50", num_labels=91)
+            rfdetr_processor = AutoImageProcessor.from_pretrained("microsoft/conditional-detr-resnet50")
+            rfdetr_model.eval()
+            if torch.cuda.is_available():
+                rfdetr_model = rfdetr_model.cuda()
+            print("✓ RF-DETR loaded")
+        except Exception as e:
+            print(f"✗ Failed to load RF-DETR: {e}")
 
 def capture_frames():
     """Background thread for camera capture"""
@@ -70,6 +119,10 @@ def capture_frames():
         # Apply brightness/contrast
         adjusted = cv2.convertScaleAbs(frame, alpha=contrast, beta=brightness * 2)
         
+        # Run object detection
+        if camera_state['detection_model'] != 'none':
+            adjusted = run_detection(adjusted)
+        
         # Convert to JPEG
         ret, buffer = cv2.imencode('.jpg', adjusted, [cv2.IMWRITE_JPEG_QUALITY, 80])
         frame_bytes = buffer.tobytes()
@@ -87,6 +140,68 @@ def capture_frames():
     
     cap.release()
     print("Camera closed")
+
+def run_detection(frame):
+    """Run object detection on frame"""
+    model = camera_state['detection_model']
+    conf_threshold = camera_state['detection_confidence']
+    
+    if model == 'yolo' and yolo_model:
+        try:
+            results = yolo_model(frame, conf=conf_threshold, verbose=False)
+            frame = results[0].plot()
+            
+            # Store detections
+            if results[0].boxes:
+                detections = []
+                for box in results[0].boxes:
+                    detections.append({
+                        'class': yolo_model.names[int(box.cls[0])],
+                        'conf': float(box.conf[0]),
+                        'bbox': box.xyxy[0].tolist()
+                    })
+                camera_state['detections'] = detections
+        except Exception as e:
+            print(f"YOLO error: {e}")
+    
+    elif model == 'rfdetr' and rfdetr_model and rfdetr_processor:
+        try:
+            # Prepare image
+            inputs = rfdetr_processor(images=frame, return_tensors="pt")
+            device = next(rfdetr_model.parameters()).device
+            inputs = {k: v.to(device) for k, v in inputs.items()}
+            
+            # Run inference
+            with torch.no_grad():
+                outputs = rfdetr_model(**inputs)
+            
+            # Post-process
+            target_sizes = torch.tensor([frame.shape[:2][::-1]])
+            results = rfdetr_processor.post_process_object_detection(
+                outputs, target_sizes=target_sizes, threshold=conf_threshold
+            )
+            
+            # Draw boxes
+            detections = []
+            for boxes, scores, labels in zip(results[0]['boxes'], results[0]['scores'], results[0]['labels']):
+                if scores.item() > conf_threshold:
+                    box = boxes.cpu().numpy().astype(int)
+                    x1, y1, x2, y2 = box
+                    cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                    label = f"{scores.item():.2f}"
+                    cv2.putText(frame, label, (x1, y1 - 10),
+                              cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+                    
+                    detections.append({
+                        'conf': float(scores.item()),
+                        'bbox': box.tolist()
+                    })
+            
+            camera_state['detections'] = detections
+        except Exception as e:
+            print(f"RF-DETR error: {e}")
+    
+    return frame
 
 def generate_frames():
     """Generator for streaming frames"""
@@ -124,6 +239,11 @@ def get_state():
             'contrast': camera_state['contrast'],
             'night_mode': camera_state['night_mode'],
             'fps': camera_state['fps'],
+            'detection_model': camera_state['detection_model'],
+            'detection_confidence': camera_state['detection_confidence'],
+            'detections_count': len(camera_state['detections']),
+            'yolo_available': YOLO_AVAILABLE,
+            'rfdetr_available': RFDETR_AVAILABLE,
         })
 
 @app.route('/api/brightness', methods=['POST'])
@@ -177,7 +297,33 @@ def capture_image():
     
     return jsonify({'success': False, 'error': 'No frame available'}), 500
 
+@app.route('/api/detection_model', methods=['POST'])
+def set_detection_model():
+    """Set detection model"""
+    data = request.get_json()
+    model = data.get('model', 'none')  # 'none', 'yolo', 'rfdetr'
+    
+    if model == 'yolo' and not YOLO_AVAILABLE:
+        return jsonify({'success': False, 'error': 'YOLO not available'}), 400
+    if model == 'rfdetr' and not RFDETR_AVAILABLE:
+        return jsonify({'success': False, 'error': 'RF-DETR not available'}), 400
+    
+    camera_state['detection_model'] = model
+    return jsonify({'success': True, 'model': model})
+
+@app.route('/api/detection_confidence', methods=['POST'])
+def set_detection_confidence():
+    """Set detection confidence threshold"""
+    data = request.get_json()
+    confidence = float(data.get('confidence', 0.5))
+    confidence = max(0.0, min(1.0, confidence))
+    camera_state['detection_confidence'] = confidence
+    return jsonify({'confidence': camera_state['detection_confidence']})
+
 if __name__ == '__main__':
+    # Load detection models
+    load_models()
+    
     # Start camera capture thread
     camera_thread = threading.Thread(target=capture_frames, daemon=True)
     camera_thread.start()
