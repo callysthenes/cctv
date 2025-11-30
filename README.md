@@ -1,6 +1,6 @@
 # CCTV Webcam Capture
 
-A Python script for capturing frames from USB webcams with adjustable brightness, contrast, and night mode support.
+A Python script and web interface for capturing frames from USB webcams with adjustable brightness, contrast, and night mode support.
 
 ## Features
 
@@ -9,6 +9,8 @@ A Python script for capturing frames from USB webcams with adjustable brightness
 - 🌙 **Night Mode**: Low-light mode with black & white conversion, high exposure, and high gain
 - 🎬 **MJPEG Support**: Efficient MJPEG codec for better compatibility
 - 📁 **Flexible Output**: Save frames to custom directories
+- 🌐 **Web Interface**: Stream camera live to browser with real-time controls
+- 📱 **Remote Access**: Control camera from any device on your network
 
 ## Requirements
 
@@ -19,12 +21,31 @@ A Python script for capturing frames from USB webcams with adjustable brightness
 ### Install Dependencies
 
 ```bash
-pip install opencv-python
+pip install opencv-python flask
 ```
 
 ## Usage
 
-### Basic Usage
+### Web Interface (Recommended)
+
+Start the web server:
+
+```bash
+python webcam_server.py
+```
+
+Then open your browser to:
+- **Local machine:** http://localhost:5000
+- **Remote machine:** http://server_ip:5000
+
+Features:
+- 📹 Live camera stream
+- 🎚️ Real-time brightness/contrast sliders
+- 🌙 Night mode toggle
+- 📸 Capture frames directly from browser
+- 📊 FPS display
+
+### Command-Line Interface
 
 Capture 5 frames from device 0 (default):
 
